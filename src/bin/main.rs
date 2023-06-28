@@ -3,7 +3,10 @@ use std::net::TcpListener; // For binding with socket of the server
 use std::net::TcpStream; // For taking data in form of streams from the server
 use std::io::prelude::*;
 use std::thread;
-use std::time::Duration; // for importing all required i/o operations
+use std::time::Duration;
+
+use webserver::ThreadPool; // for importing all required i/o operations
+
 
 // Tcp/IP layer: physical data-link internet transport application
 // Applcation: http ftp smtp // for presentatin, formating data encryption and start or stop server 
@@ -25,9 +28,12 @@ fn main(){
     let listener = 
         TcpListener::bind("127.0.0.1:7878").unwrap(); // Binding the connection wth socket
 
+    let pool = ThreadPool::new(4); // For creating a pool of 4 threads to handle the incoming connections
+    // Each thread in it will take one connection resolve it and then take another after it gets free
+
     for stream in listener.incoming() { // Iterate through all the incoming connection and deal with it
         let stream = stream.unwrap(); // Unwraping the stream to work on it should be error handled too but not doing it here
-        handle_connection(stream); 
+        pool.execute(|| handle_connection(stream));
     }
 }
 
@@ -38,7 +44,7 @@ fn handle_connection(mut stream: TcpStream)
     stream.read(&mut buff).unwrap(); // Read the bytes into buff
 
     let get = b"GET / HTTP/1.1\r\n"; // Status code in bytes
-    let sleep = b"GET /sleep HHTP/1.1 \r\n"; // For handling if one request takes a little long time
+    let sleep = b"GET /sleep HTTP/1.1 \r\n"; // For handling if one request takes a little long time
 
     let (status_code, contents) =
         if buff.starts_with(get){
@@ -51,6 +57,8 @@ fn handle_connection(mut stream: TcpStream)
         else{
             ("HTTP/1.1 404 NOT FOUND", read_to_string("../404.html").unwrap())
         };
+
+    println!("{}", status_code);
 
     let response = format!("{}\r\nContent-Length: {}\r\n\r\n{}", status_code, contents.len(), contents);
     stream.write(response.as_bytes()).unwrap();
